@@ -1,364 +1,115 @@
-/* ============================================
-   game.js — Game state machine & orchestrator
-   States: MENU, PLAYING, DEAD, WON
-   ============================================ */
+/* === GAME: Main loop, state machine, input === */
+(function(){
+var canvas=document.getElementById("gameCanvas"),ctx=canvas.getContext("2d");
+var state="MENU",time=0,player,level,camX=0,attempts=0,deathTimer=0,flashAl=0,scale=1,gw=800;
+var jumpPressed=false,jumpJust=false,prevPress=false;
 
-import { Player } from './player.js';
-import { Camera } from './camera.js';
-import { Level } from './level.js';
-import { AudioManager } from './audio.js';
-import { ParticleSystem } from './particles.js';
-import { UI } from './ui.js';
-import { Renderer } from './renderer.js';
-import { aabbOverlap } from './collision.js';
-import { TILE } from './objects.js';
+function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+window.addEventListener("resize",resize);resize();
 
-// Game-world constants
-const GROUND_Y = 440;
-const GAME_HEIGHT = 500;
+// Input
+window.addEventListener("keydown",function(e){if(e.code==="Space"||e.key===" "){e.preventDefault();jumpPressed=true;}});
+window.addEventListener("keyup",function(e){if(e.code==="Space"||e.key===" ")jumpPressed=false;});
+canvas.addEventListener("mousedown",function(e){e.preventDefault();jumpPressed=true;});
+canvas.addEventListener("mouseup",function(){jumpPressed=false;});
+canvas.addEventListener("touchstart",function(e){e.preventDefault();jumpPressed=true;},{passive:false});
+canvas.addEventListener("touchend",function(){jumpPressed=false;});
 
-export const STATE = {
-    MENU: 'MENU',
-    PLAYING: 'PLAYING',
-    DEAD: 'DEAD',
-    WON: 'WON'
-};
-
-export class Game {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.state = STATE.MENU;
-        this.time = 0;
-
-        // Subsystems
-        this.player = new Player(GROUND_Y);
-        this.camera = new Camera();
-        this.level = new Level();
-        this.audio = new AudioManager();
-        this.particles = new ParticleSystem();
-        this.ui = new UI();
-        this.renderer = new Renderer();
-
-        // Stats
-        this.attempts = 0;
-        this.deathTimer = 0;
-        this.flashAlpha = 0;
-
-        // Scaling
-        this.scale = 1;
-        this.gameWidth = 800;
-
-        // Input binding
-        this.player.bindInput(canvas);
-        this._bindMenuInput(canvas);
-    }
-
-    /** Bind click/tap for menu interaction */
-    _bindMenuInput(canvas) {
-        const handler = (e) => {
-            e.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            let clientX, clientY;
-            if (e.touches) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
-            // Convert to game coordinates
-            const clickX = (clientX - rect.left) / this.scale;
-            const clickY = (clientY - rect.top) / this.scale;
-
-            if (this.state === STATE.MENU) {
-                if (this.ui.isPlayClicked(clickX, clickY)) {
-                    this.startLevel();
-                }
-            } else if (this.state === STATE.WON) {
-                this.state = STATE.MENU;
-            }
-        };
-        canvas.addEventListener('click', handler);
-        canvas.addEventListener('touchstart', handler, { passive: false });
-    }
-
-    /** Start / restart the current level */
-    async startLevel() {
-        // Init audio on first user gesture
-        this.audio.init();
-        await this.audio.resume();
-
-        // Load level
-        await this.level.load('assets/levels/level1.json', GROUND_Y);
-
-        // Set audio BPM
-        this.audio.bpm = this.level.bpm;
-
-        // Reset player
-        this.player.reset();
-        this.level.resetOrbs();
-        this.particles.clear();
-        this.attempts = 1;
-        this.deathTimer = 0;
-        this.flashAlpha = 0;
-
-        // Start music
-        if (this.level.musicSrc) {
-            const loaded = await this.audio.load(this.level.musicSrc);
-            if (loaded) this.audio.play();
-            else this.audio.playProceduralBeat();
-        } else {
-            this.audio.playProceduralBeat();
-        }
-
-        this.state = STATE.PLAYING;
-    }
-
-    /** Restart after death */
-    _restart() {
-        this.player.reset();
-        this.level.resetOrbs();
-        this.particles.clear();
-        this.attempts++;
-        this.deathTimer = 0;
-        this.flashAlpha = 0;
-
-        // Restart music
-        if (this.level.musicSrc && this.audio.buffer) {
-            this.audio.play();
-        } else {
-            this.audio.playProceduralBeat();
-        }
-
-        this.state = STATE.PLAYING;
-    }
-
-    /** Calculate viewport scale */
-    updateScale() {
-        this.scale = this.canvas.height / GAME_HEIGHT;
-        this.gameWidth = this.canvas.width / this.scale;
-    }
-
-    // ══════════════════════════════════════
-    //  UPDATE
-    // ══════════════════════════════════════
-    update(dt) {
-        this.time += dt;
-        this.updateScale();
-
-        switch (this.state) {
-            case STATE.MENU:
-                break;
-
-            case STATE.PLAYING:
-                this._updatePlaying(dt);
-                break;
-
-            case STATE.DEAD:
-                this._updateDead(dt);
-                break;
-
-            case STATE.WON:
-                break;
-        }
-    }
-
-    _updatePlaying(_dt) {
-        const p = this.player;
-        const speed = this.level.speed;
-
-        // Input
-        p.updateInput();
-
-        // ── Phase 1: Move X ──
-        const prevX = p.x;
-        p.x += speed;
-
-        // Check block collision (horizontal → death)
-        const hbox = p.getHitbox();
-        for (const block of this.level.blocks) {
-            if (aabbOverlap(hbox, block.getHitbox())) {
-                // Player ran into the side of a block
-                p.x = prevX; // rollback
-                p.x += speed; // try again for the check
-                // Actually check if it's truly a side hit
-                const ph = p.getHitbox();
-                const bh = block.getHitbox();
-                if (aabbOverlap(ph, bh)) {
-                    // Confirm: check if player's bottom was above block's top before
-                    // If so, this is a landing scenario handled in Y phase
-                    // If not, it's a wall → die
-                    const playerBottom = p.y + p.size;
-                    const blockTop = block.y;
-                    if (playerBottom > blockTop + 4) {
-                        // Player is not above the block → wall collision → die
-                        this._die();
-                        return;
-                    }
-                }
-            }
-        }
-
-        // ── Phase 2: Try jump ──
-        p.tryJump();
-        if (p.jumpJustPressed && !p.onGround) {
-            // Check orb interaction
-            for (const orb of this.level.orbs) {
-                if (!orb.used && aabbOverlap(p.getHitbox(), orb.getHitbox())) {
-                    orb.used = true;
-                    p.airJump();
-                    this.audio.playSFX('jump');
-                    break;
-                }
-            }
-        }
-        if (p.vy === p.jumpForce && p.vy !== 0) {
-            this.audio.playSFX('jump');
-        }
-
-        // ── Phase 3: Move Y (gravity) ──
-        p.applyGravity();
-
-        // Check block collision (vertical → land or head bump)
-        for (const block of this.level.blocks) {
-            const ph = p.getHitbox();
-            const bh = block.getHitbox();
-            if (aabbOverlap(ph, bh)) {
-                if (p.vy > 0) {
-                    // Landing on top
-                    p.y = block.y - p.size;
-                    p.vy = 0;
-                    p.onGround = true;
-                } else if (p.vy < 0) {
-                    // Head bump
-                    p.y = block.y + block.height;
-                    p.vy = 0;
-                }
-            }
-        }
-
-        // ── Phase 4: Check spikes ──
-        for (const spike of this.level.spikes) {
-            if (aabbOverlap(p.getHitbox(), spike.getHitbox())) {
-                this._die();
-                return;
-            }
-        }
-
-        // ── Phase 5: Check pads ──
-        for (const pad of this.level.pads) {
-            if (aabbOverlap(p.getHitbox(), pad.getHitbox())) {
-                p.launch(pad.force);
-                this.audio.playSFX('jump');
-            }
-        }
-
-        // ── Phase 6: Check win ──
-        if (this.level.endX > 0 && p.x >= this.level.endX) {
-            this.state = STATE.WON;
-            this.audio.stop();
-            this.audio.playSFX('win');
-            return;
-        }
-
-        // Visuals
-        p.updateRotation();
-        p.updateTrail();
-
-        // Camera
-        this.camera.update(p.x, this.gameWidth);
-    }
-
-    _die() {
-        const p = this.player;
-        p.die();
-        this.particles.explode(
-            p.x + p.size / 2,
-            p.y + p.size / 2,
-            p.glowColor,
-            25
-        );
-        this.audio.playSFX('die');
-        this.flashAlpha = 0.5;
-        this.deathTimer = 0;
-        this.state = STATE.DEAD;
-    }
-
-    _updateDead(dt) {
-        this.deathTimer += dt;
-        this.flashAlpha = Math.max(0, this.flashAlpha - dt * 2);
-        this.particles.update();
-
-        // Auto-restart after 500ms
-        if (this.deathTimer > 0.5) {
-            this._restart();
-        }
-    }
-
-    // ══════════════════════════════════════
-    //  RENDER
-    // ══════════════════════════════════════
-    render(ctx) {
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-
-        ctx.clearRect(0, 0, w, h);
-
-        if (this.state === STATE.MENU) {
-            // Menu is rendered in screen space (no scaling)
-            this.ui.renderMenu(ctx, w, h, this.time);
-            return;
-        }
-
-        // Apply game-world scaling
-        ctx.save();
-        ctx.scale(this.scale, this.scale);
-
-        const gw = this.gameWidth;
-        const gh = GAME_HEIGHT;
-        const camX = this.camera.x;
-
-        // Background (fixed)
-        this.renderer.renderBackground(ctx, gw, gh, this.level.bgColor, this.time);
-
-        // Translate for camera
-        ctx.save();
-        ctx.translate(-camX, 0);
-
-        // Ground
-        this.renderer.renderGround(ctx, camX, gw + camX + TILE, GROUND_Y, gh, this.level.groundColor, this.time);
-
-        // Level objects
-        this.level.render(ctx, camX, gw, this.time);
-
-        // Player
-        if (this.state !== STATE.DEAD) {
-            this.player.render(ctx);
-        }
-
-        // Particles
-        this.particles.render(ctx);
-
-        ctx.restore(); // camera
-
-        // HUD
-        if (this.state === STATE.PLAYING || this.state === STATE.DEAD) {
-            const progress = this.level.endX > 0
-                ? this.player.x / this.level.endX
-                : 0;
-            this.ui.renderHUD(ctx, gw, progress, this.attempts);
-        }
-
-        // Death flash
-        if (this.flashAlpha > 0) {
-            this.renderer.renderFlash(ctx, gw, gh, this.flashAlpha, '#ff0033');
-        }
-
-        ctx.restore(); // scale
-
-        // Victory overlay (screen space)
-        if (this.state === STATE.WON) {
-            this.ui.renderVictory(ctx, w, h, this.time, this.attempts);
-        }
-    }
+// Menu click
+function handleClick(e){
+  var rect=canvas.getBoundingClientRect(),cx,cy;
+  if(e.touches){cx=e.touches[0].clientX;cy=e.touches[0].clientY;}else{cx=e.clientX;cy=e.clientY;}
+  var mx=(cx-rect.left)/scale,my=(cy-rect.top)/scale;
+  if(state==="MENU"&&window._playBtn){
+    var b=window._playBtn;
+    // Scale button coords from game space to screen space
+    if(cx>=rect.left+b.x*scale&&cx<=rect.left+(b.x+b.w)*scale&&cy>=rect.top+b.y*scale&&cy<=rect.top+(b.y+b.h)*scale){startGame();}
+  }else if(state==="WON"){state="MENU";}
 }
+canvas.addEventListener("click",handleClick);
+
+function startGame(){
+  initAudio();if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume();
+  level=loadLevel(LEVEL1);player=makePlayer();
+  level.orbs.forEach(function(o){o.used=false;});
+  particles=[];attempts=1;deathTimer=0;flashAl=0;
+  playBeat(level.bpm);state="PLAYING";
+}
+function restart(){
+  player=makePlayer();level.orbs.forEach(function(o){o.used=false;});
+  particles=[];attempts++;deathTimer=0;flashAl=0;
+  playBeat(level.bpm);state="PLAYING";
+}
+function die(){
+  player.dead=true;explode(player.x+player.sz/2,player.y+player.sz/2,player.color,25);
+  playSFX("die");flashAl=.5;deathTimer=0;state="DEAD";
+}
+
+function updatePlaying(){
+  var p=player,sp=level.speed;
+  jumpJust=jumpPressed&&!prevPress;prevPress=jumpPressed;
+  // Move X
+  p.x+=sp;
+  var hb=playerHB(p);
+  for(var i=0;i<level.blocks.length;i++){var bl=level.blocks[i];
+    if(aabb(hb,bl)){var pBot=p.y+p.sz;if(pBot>bl.y+4){die();return;}}}
+  // Jump
+  if(p.onG&&jumpPressed){p.vy=p.jf;p.onG=false;p.tRot+=Math.PI/2;playSFX("jump");}
+  // Orbs
+  if(jumpJust&&!p.onG){for(var i=0;i<level.orbs.length;i++){var o=level.orbs[i];
+    if(!o.used&&aabb(playerHB(p),orbHB(o))){o.used=true;p.vy=p.jf;p.tRot+=Math.PI/2;playSFX("jump");break;}}}
+  // Gravity
+  p.vy+=p.grav;p.y+=p.vy;
+  if(p.y>=GROUND_Y-p.sz){p.y=GROUND_Y-p.sz;p.vy=0;p.onG=true;}
+  // Block vertical
+  for(var i=0;i<level.blocks.length;i++){var bl=level.blocks[i];
+    if(aabb(playerHB(p),bl)){if(p.vy>0){p.y=bl.y-p.sz;p.vy=0;p.onG=true;}else if(p.vy<0){p.y=bl.y+bl.h;p.vy=0;}}}
+  // Spikes
+  for(var i=0;i<level.spikes.length;i++){if(aabb(playerHB(p),spikeHB(level.spikes[i]))){die();return;}}
+  // Pads
+  for(var i=0;i<level.pads.length;i++){var pd=level.pads[i];if(aabb(playerHB(p),pd)){p.vy=pd.f;p.onG=false;p.tRot+=Math.PI/2;playSFX("jump");}}
+  // Win
+  if(level.endX>0&&p.x>=level.endX){state="WON";playSFX("win");return;}
+  // Rotation
+  var df=p.tRot-p.rot;p.rot+=df*.2;if(Math.abs(df)<.01)p.rot=p.tRot;
+  if(p.onG)p.tRot=Math.round(p.tRot/(Math.PI/2))*(Math.PI/2);
+  // Trail
+  p.trail.push({x:p.x,y:p.y+p.sz/2,al:.6,sz:p.sz*.3});
+  for(var i=p.trail.length-1;i>=0;i--){p.trail[i].al-=.04;p.trail[i].sz*=.95;if(p.trail[i].al<=0)p.trail.splice(i,1);}
+  // Camera
+  camX=p.x-gw*.33;if(camX<0)camX=0;
+}
+
+// Main loop
+var last=0,DT=1/60,acc=0;
+function loop(ts){
+  var raw=(ts-last)/1000;last=ts;acc+=Math.min(raw,.1);
+  while(acc>=DT){time+=DT;
+    if(state==="PLAYING")updatePlaying();
+    else if(state==="DEAD"){deathTimer+=DT;flashAl=Math.max(0,flashAl-DT*2);updateParticles();if(deathTimer>.5)restart();}
+    acc-=DT;
+  }
+  // Render
+  var w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);
+  if(state==="MENU"){drawMenu(ctx,w,h,time);scale=1;requestAnimationFrame(loop);return;}
+  scale=h/GH;gw=w/scale;
+  ctx.save();ctx.scale(scale,scale);
+  drawBG(ctx,gw,GH,level.bg,time);
+  ctx.save();ctx.translate(-camX,0);
+  drawGround(ctx,camX,gw+camX+TILE,GROUND_Y,GH,level.gc,time);
+  var L=camX-TILE,R=camX+gw+TILE;
+  for(var i=0;i<level.blocks.length;i++){var b=level.blocks[i];if(b.x>L&&b.x<R)drawBlock(ctx,b,level.gc);}
+  for(var i=0;i<level.spikes.length;i++){var s=level.spikes[i];if(s.x>L&&s.x<R)drawSpike(ctx,s);}
+  for(var i=0;i<level.pads.length;i++){var p=level.pads[i];if(p.x>L&&p.x<R)drawPad(ctx,p,time);}
+  for(var i=0;i<level.orbs.length;i++){var o=level.orbs[i];if(o.x>L&&o.x<R)drawOrb(ctx,o,time);}
+  if(state!=="DEAD")drawPlayer(ctx,player);
+  drawParticles(ctx);
+  ctx.restore();
+  if(state==="PLAYING"||state==="DEAD"){var prog=level.endX>0?player.x/level.endX:0;drawHUD(ctx,gw,prog,attempts);}
+  if(flashAl>0){ctx.globalAlpha=flashAl;ctx.fillStyle="#ff0033";ctx.fillRect(0,0,gw,GH);ctx.globalAlpha=1;}
+  ctx.restore();
+  if(state==="WON")drawVictory(ctx,w,h,time,attempts);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(function(ts){last=ts;loop(ts);});
+})();
