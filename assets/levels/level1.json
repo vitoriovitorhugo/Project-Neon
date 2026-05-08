@@ -1,0 +1,102 @@
+{
+  "name": "First Flight",
+  "bpm": 140,
+  "speed": 8,
+  "music": null,
+  "backgroundColor": "#0a0a2e",
+  "groundColor": "#1a1aff",
+  "accentColor": "#00ffff",
+  "objects": [
+    { "type": "spike", "col": 18, "row": 0 },
+    { "type": "spike", "col": 24, "row": 0 },
+    { "type": "spike", "col": 30, "row": 0 },
+    { "type": "spike", "col": 31, "row": 0 },
+
+    { "type": "block", "col": 38, "row": 0 },
+    { "type": "block", "col": 39, "row": 0 },
+    { "type": "spike", "col": 40, "row": 0 },
+
+    { "type": "spike", "col": 48, "row": 0 },
+    { "type": "block", "col": 50, "row": 0 },
+    { "type": "block", "col": 50, "row": 1 },
+    { "type": "spike", "col": 51, "row": 0 },
+
+    { "type": "spike", "col": 60, "row": 0 },
+    { "type": "spike", "col": 61, "row": 0 },
+    { "type": "spike", "col": 62, "row": 0 },
+
+    { "type": "block", "col": 70, "row": 0 },
+    { "type": "block", "col": 71, "row": 0 },
+    { "type": "block", "col": 72, "row": 0 },
+    { "type": "spike", "col": 72, "row": 1 },
+
+    { "type": "pad", "col": 80, "row": 0, "force": -18 },
+    { "type": "spike", "col": 84, "row": 0 },
+    { "type": "spike", "col": 85, "row": 0 },
+
+    { "type": "block", "col": 93, "row": 0 },
+    { "type": "block", "col": 94, "row": 0 },
+    { "type": "block", "col": 94, "row": 1 },
+    { "type": "block", "col": 95, "row": 0 },
+    { "type": "block", "col": 95, "row": 1 },
+    { "type": "block", "col": 95, "row": 2 },
+    { "type": "spike", "col": 96, "row": 0 },
+
+    { "type": "spike", "col": 105, "row": 0 },
+    { "type": "orb",   "col": 107, "row": 3 },
+    { "type": "spike", "col": 109, "row": 0 },
+    { "type": "spike", "col": 110, "row": 0 },
+
+    { "type": "block", "col": 118, "row": 0 },
+    { "type": "block", "col": 119, "row": 0 },
+    { "type": "pad",   "col": 119, "row": 1, "force": -20 },
+    { "type": "spike", "col": 123, "row": 0 },
+    { "type": "spike", "col": 124, "row": 0 },
+    { "type": "spike", "col": 125, "row": 0 },
+
+    { "type": "block", "col": 133, "row": 0 },
+    { "type": "block", "col": 134, "row": 0 },
+    { "type": "block", "col": 134, "row": 1 },
+    { "type": "spike", "col": 135, "row": 0 },
+    { "type": "spike", "col": 136, "row": 0 },
+    { "type": "block", "col": 138, "row": 0 },
+    { "type": "spike", "col": 139, "row": 0 },
+
+    { "type": "spike", "col": 148, "row": 0 },
+    { "type": "spike", "col": 149, "row": 0 },
+    { "type": "orb",   "col": 150, "row": 3 },
+    { "type": "spike", "col": 152, "row": 0 },
+    { "type": "spike", "col": 153, "row": 0 },
+
+    { "type": "block", "col": 162, "row": 0 },
+    { "type": "block", "col": 163, "row": 0 },
+    { "type": "block", "col": 163, "row": 1 },
+    { "type": "block", "col": 164, "row": 0 },
+    { "type": "block", "col": 164, "row": 1 },
+    { "type": "block", "col": 164, "row": 2 },
+    { "type": "pad",   "col": 164, "row": 3, "force": -16 },
+    { "type": "spike", "col": 168, "row": 0 },
+    { "type": "spike", "col": 169, "row": 0 },
+    { "type": "spike", "col": 170, "row": 0 },
+
+    { "type": "spike", "col": 180, "row": 0 },
+    { "type": "block", "col": 182, "row": 0 },
+    { "type": "block", "col": 183, "row": 0 },
+    { "type": "block", "col": 183, "row": 1 },
+    { "type": "spike", "col": 184, "row": 0 },
+    { "type": "orb",   "col": 186, "row": 3 },
+    { "type": "spike", "col": 188, "row": 0 },
+    { "type": "spike", "col": 189, "row": 0 },
+
+    { "type": "spike", "col": 198, "row": 0 },
+    { "type": "spike", "col": 199, "row": 0 },
+    { "type": "spike", "col": 200, "row": 0 },
+    { "type": "block", "col": 203, "row": 0 },
+    { "type": "block", "col": 204, "row": 0 },
+    { "type": "spike", "col": 205, "row": 0 },
+    { "type": "spike", "col": 206, "row": 0 },
+    { "type": "spike", "col": 207, "row": 0 },
+
+    { "type": "end", "col": 230, "row": 0 }
+  ]
+}
